@@ -33,8 +33,10 @@ import com.kircherelectronics.fsensor.filter.gyroscope.fusion.kalman.Orientation
 import com.kircherelectronics.fsensor.util.rotation.RotationUtil;
 import com.kircherelectronics.gyroscopeexplorer.R;
 import com.kircherelectronics.gyroscopeexplorer.datalogger.DataLoggerManager;
+import com.kircherelectronics.gyroscopeexplorer.datalogger.OriginalDataReader;
 import com.kircherelectronics.gyroscopeexplorer.gauge.GaugeBearing;
 import com.kircherelectronics.gyroscopeexplorer.gauge.GaugeRotation;
+import com.kircherelectronics.gyroscopeexplorer.listener.Simulator;
 import com.kircherelectronics.gyroscopeexplorer.util.ByteUtils;
 import com.kircherelectronics.gyroscopeexplorer.util.PaceAndRunDetector;
 import com.kircherelectronics.gyroscopeexplorer.view.VectorDrawableButton;
@@ -108,7 +110,9 @@ public class GyroscopeActivity extends AppCompatActivity {
 
     private Mode mode = Mode.GYROSCOPE_ONLY;
 
-    private static float scale = 131f;
+    private static float gyr_accuracy = 2000.0f/32768;
+
+    private static float acc_accuracy = 9.8f/(32768/2);
 
     // The gauge views. Note that these are views and UI hogs since they run in
     // the UI thread, not ideal, but easy to use.
@@ -134,36 +138,6 @@ public class GyroscopeActivity extends AppCompatActivity {
 
     private DataLoggerManager dataLogger;
 
-    private class Event {
-        private long timestamp;
-        private int type = 0;
-        private float[] data;
-
-        public long getTimestamp() {
-            return timestamp;
-        }
-
-        public void setTimestamp(long timestamp) {
-            this.timestamp = timestamp;
-        }
-
-        public int getType() {
-            return type;
-        }
-
-        public void setType(int type) {
-            this.type = type;
-        }
-
-        public float[] getData() {
-            return data;
-        }
-
-        public void setData(float[] data) {
-            this.data = data;
-        }
-    }
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -172,71 +146,7 @@ public class GyroscopeActivity extends AppCompatActivity {
         dataLogger = new DataLoggerManager(this);
         meanFilter = new MeanFilter();
         // sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-
-        try {
-            Observable<Event> observable = Observable.create(new ObservableOnSubscribe<Event>() {
-                @Override
-                public void subscribe(ObservableEmitter<Event> emitter) {
-                    List<float[]> dataList = getFromAssets();
-                    int line = dataList.size();
-
-                    while (true) {
-                    Log.e("xxx", "...");
-                    for (int i = 0; i < line; i++) {
-
-                        float[] data = dataList.get(i);
-
-                        float[] acc = new float[]{data[0], data[1], data[2]};
-                        Event event = new Event();
-                        event.setTimestamp(System.nanoTime());
-                        event.setData(acc);
-                        event.setType(4);
-                        emitter.onNext(event);
-                        try {
-                            Thread.sleep(10);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                        float[] gyc = new float[]{data[3], data[4], data[5]};
-                        event = new Event();
-                        event.setTimestamp(System.nanoTime());
-                        event.setData(gyc);
-                        event.setType(1);
-                        emitter.onNext(event);
-                        try {
-                            Thread.sleep(500);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-
-                    }
-
-                }
-                }
-            });
-            Log.e("xxxx", "xxx");
-            observable.subscribeOn(Schedulers.newThread())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe(new Observer<Event>() {
-                        @Override
-                        public void onSubscribe(Disposable d) {
-
-                        }
-                        @Override
-                        public void onNext(Event event) {
-                            onSensorChanged(event);
-                        }
-                        @Override
-                        public void onComplete() {
-                        }
-                        @Override
-                        public void onError(Throwable e) {
-                        }
-                    });
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
+        Simulator.registListener(this, "data.txt", (event)-> onSensorChanged(event));
 
         initUI();
     }
@@ -334,14 +244,15 @@ public class GyroscopeActivity extends AppCompatActivity {
         handler.removeCallbacks(runable);
     }
 
-    public void onSensorChanged(Event event) {
+    public void onSensorChanged(Simulator.Event event) {
         int type = event.getType();
         float[] data = event.getData();
-
+        long timestamp = event.getTimestamp();
         float gravityNew = (float) Math.sqrt(data[0] * data[0]
                 + data[1] * data[1] + data[2] * data[2]);
 
-        PaceAndRunDetector.getInstance().inputValue(gravityNew);
+        // if(type == Sensor.TYPE_GYROSCOPE)
+            PaceAndRunDetector.getInstance().inputValue(gravityNew);
 
         // Log.e("data", String.format("%d, %f,%f,%f", type, data[0], data[1], data[2]));
         if (type == Sensor.TYPE_ACCELEROMETER) {
@@ -361,7 +272,7 @@ public class GyroscopeActivity extends AppCompatActivity {
                     if(!orientationGyroscope.isBaseOrientationSet()) {
                         orientationGyroscope.setBaseOrientation(Quaternion.IDENTITY);
                     } else {
-                        fusedOrientation = orientationGyroscope.calculateOrientation(rotation, event.timestamp);
+                        fusedOrientation = orientationGyroscope.calculateOrientation(rotation, timestamp);
                     }
 
                     break;
@@ -371,7 +282,7 @@ public class GyroscopeActivity extends AppCompatActivity {
                             orientationComplimentaryFusion.setBaseOrientation(RotationUtil.getOrientationVectorFromAccelerationMagnetic(acceleration, magnetic));
                         }
                     } else {
-                        fusedOrientation = orientationComplimentaryFusion.calculateFusedOrientation(rotation, event.timestamp, acceleration, magnetic);
+                        fusedOrientation = orientationComplimentaryFusion.calculateFusedOrientation(rotation, timestamp, acceleration, magnetic);
                         Log.d("kbk", "Process Orientation Fusion Complimentary: " + Arrays.toString(fusedOrientation));
                     }
 
@@ -383,7 +294,7 @@ public class GyroscopeActivity extends AppCompatActivity {
                             orientationKalmanFusion.setBaseOrientation(RotationUtil.getOrientationVectorFromAccelerationMagnetic(acceleration, magnetic));
                         }
                     } else {
-                        fusedOrientation = orientationKalmanFusion.calculateFusedOrientation(rotation, event.timestamp, acceleration, magnetic);
+                        fusedOrientation = orientationKalmanFusion.calculateFusedOrientation(rotation, timestamp, acceleration, magnetic);
                     }
                     break;
             }
@@ -574,40 +485,5 @@ public class GyroscopeActivity extends AppCompatActivity {
         GYROSCOPE_ONLY,
         COMPLIMENTARY_FILTER,
         KALMAN_FILTER;
-    }
-
-    private List<float[]> getFromAssets() {
-
-        try {
-
-            List<float[]> dataList = new ArrayList<>();
-            InputStream inputStream = this.getAssets().open("data.txt");
-            BufferedReader bf = new BufferedReader(new InputStreamReader(inputStream));
-            String str;
-            // 按行读取字符串
-            while ((str = bf.readLine()) != null) {
-                float[] floats = new float[6];
-                String line = str.replace(" ", "");
-                byte[] bytes = HexUtil.hexStringToBytes(line);
-                if(bytes.length==12) {
-                    for(int i=0; i<6; i++) {
-                        byte[] d = new byte[2];
-                        System.arraycopy(bytes, i*2, d, 0, d.length);
-                        short s = ByteUtils.bytesToShort(d);
-                        Log.e("s", ""+s);
-
-                        floats[i] = (float) s / scale;
-                        Log.e("data", ""+floats[i]);
-                    }
-                }
-                dataList.add(floats);
-            }
-            bf.close();
-            inputStream.close();
-            return dataList;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return new ArrayList<>();
     }
 }

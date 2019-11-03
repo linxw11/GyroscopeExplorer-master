@@ -102,6 +102,7 @@ public class PaceAndRunDetector {
         if (diffValue <= 3000L) {
             averageTimeOfEveryStep += diffValue;
             stepCount++;
+            Log.i("result", stepCount+"");
             if (stepCount == 9) {
                 averageTimeOfEveryStep = averageTimeOfEveryStep / 10;
                 Log.i("result", "averageTimeOfEveryStep: " + averageTimeOfEveryStep);
