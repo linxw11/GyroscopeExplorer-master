@@ -110,10 +110,6 @@ public class GyroscopeActivity extends AppCompatActivity {
 
     private Mode mode = Mode.GYROSCOPE_ONLY;
 
-    private static float gyr_accuracy = 2000.0f/32768;
-
-    private static float acc_accuracy = 9.8f/(32768/2);
-
     // The gauge views. Note that these are views and UI hogs since they run in
     // the UI thread, not ideal, but easy to use.
     private GaugeBearing gaugeBearingCalibrated;
@@ -146,7 +142,7 @@ public class GyroscopeActivity extends AppCompatActivity {
         dataLogger = new DataLoggerManager(this);
         meanFilter = new MeanFilter();
         // sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        Simulator.registListener(this, "data.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data2.txt", (event)-> onSensorChanged(event));
 
         initUI();
     }
@@ -484,6 +480,6 @@ public class GyroscopeActivity extends AppCompatActivity {
     private enum Mode {
         GYROSCOPE_ONLY,
         COMPLIMENTARY_FILTER,
-        KALMAN_FILTER;
+        KALMAN_FILTER
     }
 }

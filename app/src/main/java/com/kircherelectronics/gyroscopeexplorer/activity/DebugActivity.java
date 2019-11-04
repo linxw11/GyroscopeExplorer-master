@@ -2,6 +2,7 @@ package com.kircherelectronics.gyroscopeexplorer.activity;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -17,17 +18,22 @@ import android.widget.TextView;
 import com.jjoe64.graphview.GraphView;
 import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
+import com.kircherelectronics.fsensor.filter.gyroscope.OrientationGyroscope;
 import com.kircherelectronics.gyroscopeexplorer.R;
 import com.kircherelectronics.gyroscopeexplorer.listener.Simulator;
 
+import org.apache.commons.math3.complex.Quaternion;
+
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
 
 public class DebugActivity extends AppCompatActivity {
 
-    private static int SMOOTHING_WINDOW_SIZE = 5;
+    private static int SMOOTHING_WINDOW_SIZE = 20;
 
     public static SensorManager mSensorManager;
     public static Sensor mSensorCount, mSensorAcc;
@@ -46,8 +52,12 @@ public class DebugActivity extends AppCompatActivity {
     private double mGraph1LastXValue = 0d;
     private double mGraph2LastXValue = 0d;
 
-    private LineGraphSeries<DataPoint> mSeries1;
-    private LineGraphSeries<DataPoint> mSeries2;
+    private LineGraphSeries<DataPoint> mSeries11;
+    private LineGraphSeries<DataPoint> mSeries12;
+    private LineGraphSeries<DataPoint> mSeries13;
+    private LineGraphSeries<DataPoint> mSeries21;
+    private LineGraphSeries<DataPoint> mSeries22;
+    private LineGraphSeries<DataPoint> mSeries23;
 
     private double lastMag = 0d;
     private double avgMag = 0d;
@@ -58,6 +68,9 @@ public class DebugActivity extends AppCompatActivity {
     double stepThreshold = 1.0d;
     double noiseThreshold = 6d;
     private int windowSize = 20;
+
+    private static OrientationGyroscope orientationGyroscope = new OrientationGyroscope();
+    private float[] orientation = new float[3];
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -73,25 +86,39 @@ public class DebugActivity extends AppCompatActivity {
 
         //Graph for showing raw acceleration magnitude signal
         GraphView graph = (GraphView) this.findViewById(R.id.graph);
-        mSeries1 = new LineGraphSeries<>();
-        graph.addSeries(mSeries1);
+
+        mSeries11 = new LineGraphSeries<>();
+        mSeries11.setColor(Color.YELLOW);
+        graph.addSeries(mSeries11);
+        mSeries12 = new LineGraphSeries<>();
+        mSeries12.setColor(Color.BLUE);
+        graph.addSeries(mSeries12);
+        mSeries13 = new LineGraphSeries<>();
+        mSeries13.setColor(Color.RED);
+        graph.addSeries(mSeries13);
+
         graph.setTitle("Accelerator Signal");
         graph.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph.getViewport().setXAxisBoundsManual(true);
         graph.getViewport().setMinX(0);
-        graph.getViewport().setMaxX(160);
+        graph.getViewport().setMaxX(50);
 
         //Graph for showing smoothed acceleration magnitude signal
         GraphView graph2 = (GraphView) this.findViewById(R.id.graph2);
-        mSeries2 = new LineGraphSeries<>();
+        mSeries21 = new LineGraphSeries<>();
+        graph2.addSeries(mSeries21);
+        mSeries22 = new LineGraphSeries<>();
+        graph2.addSeries(mSeries22);
+        mSeries23 = new LineGraphSeries<>();
+        graph2.addSeries(mSeries23);
+
         graph2.setTitle("Smoothed Signal");
-        graph2.addSeries(mSeries2);
         graph2.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph2.getViewport().setXAxisBoundsManual(true);
         graph2.getViewport().setMinX(0);
-        graph2.getViewport().setMaxX(160);
+        graph2.getViewport().setMaxX(50);
 
-        Simulator.registListener(this, "data.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data2.txt", (event)-> onSensorChanged(event));
     }
 
     //Button to link home view from debug view
@@ -112,6 +139,15 @@ public class DebugActivity extends AppCompatActivity {
                 mStepCounterAndroid = values[0];
                 break;
             case Sensor.TYPE_ACCELEROMETER:
+
+                /*if(!orientationGyroscope.isBaseOrientationSet()) {
+                    orientationGyroscope.setBaseOrientation(Quaternion.IDENTITY);
+                } else {
+                    orientation = orientationGyroscope.calculateOrientation(values, e.getTimestamp());
+                }*/
+
+                // Log.e("orientation", Arrays.toString(orientation));
+
                 mRawAccelValues[0] = values[0];
                 mRawAccelValues[1] = values[1];
                 mRawAccelValues[2] = values[2];
@@ -136,10 +172,14 @@ public class DebugActivity extends AppCompatActivity {
 
                 //update graph data points
                 mGraph1LastXValue += 1d;
-                mSeries1.appendData(new DataPoint(mGraph1LastXValue, lastMag), true, 160);
+                mSeries11.appendData(new DataPoint(mGraph1LastXValue, lastMag), true, 50);
+                // mSeries12.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[1]), true, 50);
+                // mSeries13.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[2]), true, 50);
 
                 mGraph2LastXValue += 1d;
-                mSeries2.appendData(new DataPoint(mGraph2LastXValue, netMag), true, 160);
+                mSeries21.appendData(new DataPoint(mGraph2LastXValue, netMag), true, 50);
+                // mSeries22.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 50);
+                // mSeries23.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 160);
         }
 
         TextView calculatedStep = (TextView) this.findViewById(R.id.tv1);
@@ -161,13 +201,13 @@ public class DebugActivity extends AppCompatActivity {
             * Phone is held vertically in portrait orientation for better results
          */
 
-        double highestValX = mSeries2.getHighestValueX();
+        double highestValX = mSeries21.getHighestValueX();
 
         if(highestValX - lastXPoint < windowSize){
             return;
         }
 
-        Iterator<DataPoint> valuesInWindow = mSeries2.getValues(lastXPoint,highestValX);
+        Iterator<DataPoint> valuesInWindow = mSeries21.getValues(lastXPoint,highestValX);
 
         lastXPoint = highestValX;
 
