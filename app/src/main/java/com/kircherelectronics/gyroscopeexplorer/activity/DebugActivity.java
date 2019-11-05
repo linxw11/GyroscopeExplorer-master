@@ -65,8 +65,8 @@ public class DebugActivity extends AppCompatActivity {
 
     //peak detection variables
     private double lastXPoint = 1d;
-    double stepThreshold = 5d;
-    double noiseThreshold = 15d;
+    double stepThreshold = 1d;
+    double noiseThreshold = 20d;
     private int windowSize = 20;
 
     private static OrientationGyroscope orientationGyroscope = new OrientationGyroscope();
@@ -124,7 +124,7 @@ public class DebugActivity extends AppCompatActivity {
         graph2.getViewport().setMinX(0);
         graph2.getViewport().setMaxX(20);
 
-        Simulator.registListener(this, "data1.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data3.txt", (event)-> onSensorChanged(event));
     }
 
     //Button to link home view from debug view
@@ -254,8 +254,9 @@ public class DebugActivity extends AppCompatActivity {
                 // In this example, alpha is calculated as t / (t + dT),
                 // where t is the low-pass filter's time-constant and
                 // dT is the event delivery rate.
-
-                final float alpha = 0.8f;
+                float deltaT = 0.5f;
+                float freqCut = 15;
+                float alpha = (float) (deltaT/(deltaT+1/(2*Math.PI*freqCut)));
 
                 // Isolate the force of gravity with the low-pass filter.
                 gravity[0] = alpha * gravity[0] + (1 - alpha) * values[0];
@@ -305,7 +306,7 @@ public class DebugActivity extends AppCompatActivity {
             return;
         }
 
-        Iterator<DataPoint> valuesInWindow = mSeries12.getValues(lastXPoint, highestValX);
+        Iterator<DataPoint> valuesInWindow = mSeries21.getValues(lastXPoint, highestValX);
 
         lastXPoint = highestValX;
 
@@ -321,7 +322,10 @@ public class DebugActivity extends AppCompatActivity {
                 forwardSlope = dataPointList.get(i+1).getY() - dataPointList.get(i).getY();
                 downwardSlope = dataPointList.get(i).getY() - dataPointList.get(i - 1).getY();
                 // Log.e("step", String.format("%f, %f, %f", forwardSlope, downwardSlope, dataPointList.get(i).getY()));
-                if(forwardSlope < 0 && downwardSlope > 0 && dataPointList.get(i).getY() > stepThreshold && dataPointList.get(i).getY() < noiseThreshold){
+                /*if(forwardSlope < 0 && downwardSlope > 0 && dataPointList.get(i).getY() > stepThreshold && dataPointList.get(i).getY() < noiseThreshold){
+                    mStepCounter+=1;
+                }*/
+                if(forwardSlope < 0 && downwardSlope > 0){
                     mStepCounter+=1;
                 }
             }
