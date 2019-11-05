@@ -65,12 +65,18 @@ public class DebugActivity extends AppCompatActivity {
 
     //peak detection variables
     private double lastXPoint = 1d;
-    double stepThreshold = 1.0d;
-    double noiseThreshold = 6d;
+    double stepThreshold = 5d;
+    double noiseThreshold = 15d;
     private int windowSize = 20;
 
     private static OrientationGyroscope orientationGyroscope = new OrientationGyroscope();
     private float[] orientation = new float[3];
+
+    private long num;
+    private float[] lastQ = new float[4];
+    private float[] rotation = new float[3];
+    private float[] gravity = new float[3];
+    private float[] linear_acceleration = new float[3];
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -101,7 +107,7 @@ public class DebugActivity extends AppCompatActivity {
         graph.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph.getViewport().setXAxisBoundsManual(true);
         graph.getViewport().setMinX(0);
-        graph.getViewport().setMaxX(50);
+        graph.getViewport().setMaxX(20);
 
         //Graph for showing smoothed acceleration magnitude signal
         GraphView graph2 = (GraphView) this.findViewById(R.id.graph2);
@@ -116,9 +122,9 @@ public class DebugActivity extends AppCompatActivity {
         graph2.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph2.getViewport().setXAxisBoundsManual(true);
         graph2.getViewport().setMinX(0);
-        graph2.getViewport().setMaxX(50);
+        graph2.getViewport().setMaxX(20);
 
-        Simulator.registListener(this, "data2.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data1.txt", (event)-> onSensorChanged(event));
     }
 
     //Button to link home view from debug view
@@ -131,28 +137,91 @@ public class DebugActivity extends AppCompatActivity {
     // @Override
     public void onSensorChanged (Simulator.Event e) {
         float[] values = e.getData();
-        switch (e.getType()) {
+        long timestamp = e.getTimestamp();
+        int type = e.getType();
+        switch (type) {
             case Sensor.TYPE_STEP_COUNTER:
                 if(mInitialStepCount == 0.0){
                     mInitialStepCount = values[0];
                 }
                 mStepCounterAndroid = values[0];
                 break;
-            case Sensor.TYPE_ACCELEROMETER:
-
-                /*if(!orientationGyroscope.isBaseOrientationSet()) {
+            case Sensor.TYPE_GYROSCOPE:
+                System.arraycopy(values, 0, rotation, 0, values.length);
+                if(!orientationGyroscope.isBaseOrientationSet()) {
                     orientationGyroscope.setBaseOrientation(Quaternion.IDENTITY);
+                    return;
                 } else {
-                    orientation = orientationGyroscope.calculateOrientation(values, e.getTimestamp());
-                }*/
+                    orientation = orientationGyroscope.calculateOrientation(rotation, timestamp);
+                }
 
-                // Log.e("orientation", Arrays.toString(orientation));
+                /*float[] degrees = new float[3];
+                degrees[0] = (float) (Math.toDegrees(orientation[0]) + 360) % 360;
+                degrees[1] = (float) (Math.toDegrees(orientation[1]) + 360) % 360;
+                degrees[2] = (float) (Math.toDegrees(orientation[2]) + 360) % 360;*/
 
-                mRawAccelValues[0] = values[0];
-                mRawAccelValues[1] = values[1];
-                mRawAccelValues[2] = values[2];
+                // Log.e("degrees", Arrays.toString(orientation));
 
-                lastMag = Math.sqrt(Math.pow(mRawAccelValues[0], 2) + Math.pow(mRawAccelValues[1], 2) + Math.pow(mRawAccelValues[2], 2));
+                float[] QAC = new float[4];
+                getQuaternionFromVector(QAC, orientation);
+
+                if(num >= 3){
+
+                    double[] QBC = new double[4];
+
+                    QBC[0] = Math.cos(orientation[0]/2)*Math.cos(orientation[1]/2)*Math.cos(orientation[2]/2)
+                        + Math.sin(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.sin(orientation[2]/2);
+                    QBC[1] = Math.sin(orientation[0]/2)*Math.cos(orientation[1]/2)*Math.cos(orientation[2]/2)
+                            - Math.cos(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.sin(orientation[2]/2);
+                    QBC[2] = Math.cos(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.cos(orientation[2]/2)
+                        + Math.sin(orientation[0]/2)*Math.cos(orientation[1]/2)*Math.sin(orientation[2]/2);
+                    QBC[3] = Math.cos(orientation[0]/2)*Math.cos(orientation[1]/2)*Math.sin(orientation[2]/2)
+                        - Math.sin(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.cos(orientation[2]/2);
+
+
+                    /*float[] QBA = new float[4];
+                    QBA[0] = lastQ[0];
+                    QBA[1] = -lastQ[1];
+                    QBA[2] = -lastQ[2];
+                    QBA[3] = -lastQ[3];
+                    // QBA = QBA * QAC
+                    float[] QBC = new float[4];
+                    QBC[0] = QAC[0]*QBA[0] - QAC[1]*QBA[1] - QAC[2]*QBA[2] -QAC[3]*QBA[3];
+                    QBC[1] = QAC[0]*QBA[1] + QAC[1]*QBA[0] + QAC[2]*QBA[3] -QAC[3]*QBA[2];
+                    QBC[2] = QAC[0]*QBA[2] - QAC[1]*QBA[3] + QAC[2]*QBA[0] +QAC[3]*QBA[1];
+                    QBC[3] = QAC[0]*QBA[3] + QAC[1]*QBA[2] - QAC[2]*QBA[1] +QAC[3]*QBA[0];*/
+
+                    //偏向Z轴的位移
+                    double z = Math.atan2(2*QBC[1]*QBC[2] - 2*QBC[0]*QBC[3]
+                            , 2*QBC[0]*QBC[0] + 2*QBC[1]*QBC[1]-1);
+                    //偏向X轴的位移
+                    double x = -Math.asin(2*QBC[1]*QBC[3] + 2*QBC[0]*QBC[2]);
+                    //偏向Y轴的位移
+                    double y = Math.atan2(2*QBC[2]*QBC[3] - 2*QBC[0]*QBC[1]
+                            , 2*QBC[0]*QBC[0] + 2*QBC[3]*QBC[3]-1);
+
+                    java.text.DecimalFormat df = new java.text.DecimalFormat("#0.000");
+                    // Log.i("Sensor","z=" +  df.format(z) + " x=" + df.format(x)  + " y=" +df.format(y) );
+
+                    lastQ = QAC;
+                    lastMag = Math.pow(x, 2) + Math.pow(y, 2) + Math.pow(z, 2);
+
+                    Log.e("d", lastMag+"");
+                    // Math.sqrt();
+                    mRawAccelValues[0] = (float) Math.abs(x);
+                    mRawAccelValues[1] = (float) Math.abs(y);
+                    mRawAccelValues[2] = (float) Math.abs(z);
+
+                } else {
+                    num++;
+                    lastQ = QAC;
+                }
+
+                // mRawAccelValues[0] = values[0];
+                // mRawAccelValues[1] = values[1];
+                // mRawAccelValues[2] = values[2];
+
+                // lastMag = Math.sqrt(Math.pow(mRawAccelValues[0], 2) + Math.pow(mRawAccelValues[1], 2) + Math.pow(mRawAccelValues[2], 2));
 
                 //Source: https://github.com/jonfroehlich/CSE590Sp2018
                 for (int i = 0; i < 3; i++) {
@@ -166,20 +235,49 @@ public class DebugActivity extends AppCompatActivity {
                     mCurReadIndex = 0;
                 }
 
-                avgMag = Math.sqrt(Math.pow(mCurAccelAvg[0], 2) + Math.pow(mCurAccelAvg[1], 2) + Math.pow(mCurAccelAvg[2], 2));
-
+                avgMag = Math.pow(mCurAccelAvg[0], 2) + Math.pow(mCurAccelAvg[1], 2) + Math.pow(mCurAccelAvg[2], 2);
+                // Math.sqrt();
                 netMag = lastMag - avgMag; //removes gravity effect
-
+                Log.e("d", netMag + "");
                 //update graph data points
                 mGraph1LastXValue += 1d;
-                mSeries11.appendData(new DataPoint(mGraph1LastXValue, lastMag), true, 50);
-                // mSeries12.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[1]), true, 50);
-                // mSeries13.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[2]), true, 50);
+                // mSeries11.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[0]), true, 20);
+                // mSeries12.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[1]), true, 20);
+                // mSeries13.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[2]), true, 20);
 
                 mGraph2LastXValue += 1d;
-                mSeries21.appendData(new DataPoint(mGraph2LastXValue, netMag), true, 50);
+                // mSeries21.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 20);
                 // mSeries22.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 50);
                 // mSeries23.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 160);
+                break;
+            case Sensor.TYPE_ACCELEROMETER: {
+                // In this example, alpha is calculated as t / (t + dT),
+                // where t is the low-pass filter's time-constant and
+                // dT is the event delivery rate.
+
+                final float alpha = 0.8f;
+
+                // Isolate the force of gravity with the low-pass filter.
+                gravity[0] = alpha * gravity[0] + (1 - alpha) * values[0];
+                gravity[1] = alpha * gravity[1] + (1 - alpha) * values[1];
+                gravity[2] = alpha * gravity[2] + (1 - alpha) * values[2];
+
+                // Remove the gravity contribution with the high-pass filter.
+                linear_acceleration[0] = values[0] - gravity[0];
+                linear_acceleration[1] = values[1] - gravity[1];
+                linear_acceleration[2] = values[2] - gravity[2];
+
+                Log.d("acceleration", Arrays.toString(linear_acceleration));
+
+                mSeries11.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[0])), true, 20);
+                mSeries12.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[1])), true, 20);
+                mSeries13.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[2])), true, 20);
+
+                lastMag = Math.sqrt(Math.pow(linear_acceleration[0], 2) + Math.pow(linear_acceleration[1], 2) + Math.pow(linear_acceleration[2], 2));
+
+                mSeries21.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 20);
+                break;
+            }
         }
 
         TextView calculatedStep = (TextView) this.findViewById(R.id.tv1);
@@ -207,7 +305,7 @@ public class DebugActivity extends AppCompatActivity {
             return;
         }
 
-        Iterator<DataPoint> valuesInWindow = mSeries21.getValues(lastXPoint,highestValX);
+        Iterator<DataPoint> valuesInWindow = mSeries12.getValues(lastXPoint, highestValX);
 
         lastXPoint = highestValX;
 
@@ -222,7 +320,7 @@ public class DebugActivity extends AppCompatActivity {
             else if(i < dataPointList.size() - 1){
                 forwardSlope = dataPointList.get(i+1).getY() - dataPointList.get(i).getY();
                 downwardSlope = dataPointList.get(i).getY() - dataPointList.get(i - 1).getY();
-                Log.e("step", String.format("%f, %f, %f", forwardSlope, downwardSlope, dataPointList.get(i).getY()));
+                // Log.e("step", String.format("%f, %f, %f", forwardSlope, downwardSlope, dataPointList.get(i).getY()));
                 if(forwardSlope < 0 && downwardSlope > 0 && dataPointList.get(i).getY() > stepThreshold && dataPointList.get(i).getY() < noiseThreshold){
                     mStepCounter+=1;
                 }
@@ -232,6 +330,23 @@ public class DebugActivity extends AppCompatActivity {
 
     // @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
+
+    /**
+     * 获取一个四元素
+     * @param Q
+     * @param rv
+     */
+    public static void getQuaternionFromVector(float[] Q, float[] rv) {
+        if (rv.length >= 4) {
+            Q[0] = rv[3];
+        } else {
+            Q[0] = 1 - rv[0]*rv[0] - rv[1]*rv[1] - rv[2]*rv[2];
+            Q[0] = (Q[0] > 0) ? (float) Math.sqrt(Q[0]) : 0;
+        }
+        Q[1] = -rv[0];
+        Q[2] = -rv[1];
+        Q[3] = -rv[2];
     }
 }
 

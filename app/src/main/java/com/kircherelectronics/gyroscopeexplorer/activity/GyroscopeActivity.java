@@ -482,4 +482,5 @@ public class GyroscopeActivity extends AppCompatActivity {
         COMPLIMENTARY_FILTER,
         KALMAN_FILTER
     }
+
 }
