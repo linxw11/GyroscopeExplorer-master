@@ -124,7 +124,7 @@ public class DebugActivity extends AppCompatActivity {
         graph2.getViewport().setMinX(0);
         graph2.getViewport().setMaxX(20);
 
-        Simulator.registListener(this, "data1.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data3.txt", (event)-> onSensorChanged(event));
     }
 
     //Button to link home view from debug view
@@ -255,7 +255,10 @@ public class DebugActivity extends AppCompatActivity {
                 // where t is the low-pass filter's time-constant and
                 // dT is the event delivery rate.
 
-                final float alpha = 0.8f;
+                float deltaT = 0.5f;
+                float freqCut = 10;
+                float t = (float) (1.0f/(2*Math.PI*freqCut));
+                float alpha = t /(deltaT + t);
 
                 // Isolate the force of gravity with the low-pass filter.
                 gravity[0] = alpha * gravity[0] + (1 - alpha) * values[0];
@@ -267,7 +270,16 @@ public class DebugActivity extends AppCompatActivity {
                 linear_acceleration[1] = values[1] - gravity[1];
                 linear_acceleration[2] = values[2] - gravity[2];
 
-                Log.d("acceleration", Arrays.toString(linear_acceleration));
+                double[] degress = new double[]{
+                        Math.atan(Math.sqrt(Math.pow(linear_acceleration[0], 2)
+                          + Math.pow(linear_acceleration[1], 2))/linear_acceleration[2]),
+                        Math.atan(linear_acceleration[0]/Math.sqrt(Math.pow(linear_acceleration[1], 2)
+                                + Math.pow(linear_acceleration[2], 2))),
+                        Math.atan(linear_acceleration[1]/Math.sqrt(Math.pow(linear_acceleration[0], 2)
+                                + Math.pow(linear_acceleration[2], 2)))
+                };
+
+                Log.d("acceleration", Arrays.toString(degress));
 
                 mSeries11.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[0])), true, 20);
                 mSeries12.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[1])), true, 20);
@@ -275,7 +287,7 @@ public class DebugActivity extends AppCompatActivity {
 
                 lastMag = Math.sqrt(Math.pow(linear_acceleration[0], 2) + Math.pow(linear_acceleration[1], 2) + Math.pow(linear_acceleration[2], 2));
 
-                mSeries21.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 20);
+                mSeries21.appendData(new DataPoint(mGraph2LastXValue, degress[0]), true, 20);
                 break;
             }
         }
@@ -305,7 +317,7 @@ public class DebugActivity extends AppCompatActivity {
             return;
         }
 
-        Iterator<DataPoint> valuesInWindow = mSeries12.getValues(lastXPoint, highestValX);
+        Iterator<DataPoint> valuesInWindow = mSeries21.getValues(lastXPoint, highestValX);
 
         lastXPoint = highestValX;
 
@@ -321,7 +333,10 @@ public class DebugActivity extends AppCompatActivity {
                 forwardSlope = dataPointList.get(i+1).getY() - dataPointList.get(i).getY();
                 downwardSlope = dataPointList.get(i).getY() - dataPointList.get(i - 1).getY();
                 // Log.e("step", String.format("%f, %f, %f", forwardSlope, downwardSlope, dataPointList.get(i).getY()));
-                if(forwardSlope < 0 && downwardSlope > 0 && dataPointList.get(i).getY() > stepThreshold && dataPointList.get(i).getY() < noiseThreshold){
+                /*if(forwardSlope < 0 && downwardSlope > 0 && dataPointList.get(i).getY() > stepThreshold && dataPointList.get(i).getY() < noiseThreshold){
+                    mStepCounter+=1;
+                }*/
+                if(forwardSlope < 0 && downwardSlope > 0) {
                     mStepCounter+=1;
                 }
             }

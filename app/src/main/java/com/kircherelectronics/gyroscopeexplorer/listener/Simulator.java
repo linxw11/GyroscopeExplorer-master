@@ -58,7 +58,7 @@ public class Simulator  {
                         event.setType(Sensor.TYPE_GYROSCOPE);
                         emitter.onNext(event);
                         try {
-                            Thread.sleep(250);
+                            Thread.sleep(500);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }

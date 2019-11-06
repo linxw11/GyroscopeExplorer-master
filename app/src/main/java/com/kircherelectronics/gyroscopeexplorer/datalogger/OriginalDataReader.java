@@ -29,7 +29,10 @@ public class OriginalDataReader {
             // 按行读取字符串
             while ((str = bf.readLine()) != null) {
                 float[] floats = new float[6];
-                String line = str.replace(" ", "");
+                String line = str.replace(" ", "")
+                        .replaceAll("<", "")
+                        .replaceAll(">", "")
+                        .substring(16);
                 byte[] bytes = HexUtil.hexStringToBytes(line);
                 if(bytes.length==12) {
                     for(int i=0; i<6; i++) {
