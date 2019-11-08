@@ -44,7 +44,7 @@ public class PaceAndRunDetector {
     //初始阈值
     float ThreadValue = (float) 2.0;
     //波峰波谷时间差
-    int TimeInterval = 250;
+    int TimeInterval = 400;
 
     private int stepCount = 0;
     private long timeOfLastStep = 0;
