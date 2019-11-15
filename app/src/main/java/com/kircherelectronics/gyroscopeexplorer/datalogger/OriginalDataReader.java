@@ -29,7 +29,10 @@ public class OriginalDataReader {
             // 按行读取字符串
             while ((str = bf.readLine()) != null) {
                 float[] floats = new float[6];
-                String line = str.replace(" ", "");
+                String line = str.replace(" ", "")
+                        .replaceAll("<", "")
+                        .replaceAll(">", "")
+                        .substring(16);
                 byte[] bytes = HexUtil.hexStringToBytes(line);
                 if(bytes.length==12) {
                     for(int i=0; i<6; i++) {
@@ -43,8 +46,8 @@ public class OriginalDataReader {
                             floats[i] = (float) s * gyr_accuracy;
                         }
                     }
-                    Log.e("acc", String.format("%f,%f,%f", floats[0],floats[1],floats[2]));
-                    Log.e("gyr", String.format("%f,%f,%f", floats[3],floats[4],floats[5]));
+                    // Log.e("acc", String.format("%f,%f,%f", floats[0],floats[1],floats[2]));
+                    // Log.e("gyr", String.format("%f,%f,%f", floats[3],floats[4],floats[5]));
 
                 }
                 dataList.add(floats);

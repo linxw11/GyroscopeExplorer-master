@@ -1,4 +1,4 @@
-package com.kircherelectronics.gyroscopeexplorer.util;
+package com.kircherelectronics.gyroscopeexplorer.detector;
 
 import android.util.Log;
 
@@ -7,20 +7,37 @@ import android.util.Log;
  * 步行或者跑步
  */
 
-public class PaceAndRunDetector {
+public class WaveDetector {
 
-    private static PaceAndRunDetector paceAndRunDetector;
+    // 连续上升次数
+    int CONTINUE_UP_LIMIT;
+    // 峰值范围最小值
+    float PEAK_MIN;
+    float PEAK_MAX;
+    float VALLEY_MIN;
+    float VALLEY_MAX;
 
-    //存放三轴数据
-    float[] oriValues = new float[3];
-    final int ValueNum = 4;
     //用于存放计算阈值的波峰波谷差值
-    float[] tempValue = new float[ValueNum];
+    int TEMP_NUM;
+    float[] tempValue;
+    //动态阈值需要动态的数据，这个值用于这些动态数据的阈值
+    float INITIAL_VALUE;
+    //初始阈值
+    float highValue;
+    float lowValue;
+
+
+
+    //波峰波谷时间差
+    int timeInterval;
+
     int tempCount = 0;
     //是否上升的标志位
     boolean isDirectionUp = false;
     //持续上升次数
     int continueUpCount = 0;
+    // 持续下降次数
+    int continueDownCount = 0;
     //上一点的持续上升的次数，为了记录波峰的上升次数
     int continueUpFormerCount = 0;
     //上一点的状态，上升还是下降
@@ -35,32 +52,14 @@ public class PaceAndRunDetector {
     long timeOfLastPeak = 0;
     //当前的时间
     long timeOfNow = 0;
-    //当前传感器的值
-    float gravityNew = 0;
+
     //上次传感器的值
-    float gravityOld = 0;
-    //动态阈值需要动态的数据，这个值用于这些动态数据的阈值
-    final float InitialValue = (float) 1.3;
-    //初始阈值
-    float ThreadValue = (float) 2.0;
-    //波峰波谷时间差
-    int TimeInterval = 400;
+    float valueOld = 0;
 
-    private int stepCount = 0;
-    private long timeOfLastStep = 0;
-    private long timeOfThisStep = 0;
-    private long averageTimeOfEveryStep = 0;
+    int count = 0;
 
-    public static PaceAndRunDetector getInstance() {
-        if (paceAndRunDetector == null) {
-            paceAndRunDetector = new PaceAndRunDetector();
-        }
-        return paceAndRunDetector;
-    }
-
-    //数据的输入口
-    public void inputValue(float v) {
-        detectorNewStep(v);
+    public int getCount() {
+        return count * 2;
     }
 
     /*
@@ -69,61 +68,65 @@ public class PaceAndRunDetector {
      * 2.如果检测到了波峰，并且符合时间差以及阈值的条件，则判定为1步
      * 3.符合时间差条件，波峰波谷差值大于initialValue，则将该差值纳入阈值的计算中
      * */
-    public void detectorNewStep(float values) {
-        if (gravityOld == 0) {
-            gravityOld = values;
+    public void detectorNew(float value) {
+        if (valueOld == 0) {
+            valueOld = value;
         } else {
-            if (detectorPeak(values, gravityOld)) {
+            timeOfNow = System.currentTimeMillis();
+            if (detectorPeak(value, valueOld)) {
                 timeOfLastPeak = timeOfThisPeak;
-                timeOfNow = System.currentTimeMillis();
-                if (timeOfNow - timeOfLastPeak >= TimeInterval
-                        && (peakOfWave - valleyOfWave >= ThreadValue)) {
+
+                // 第一个波峰
+                long dt = timeOfNow - timeOfLastPeak;
+                float dw = peakOfWave - valleyOfWave;
+
+                Log.d("check", String.format("%d, %f", dt, dw));
+                if (dt >= timeInterval && dw >= lowValue && dw <= highValue) {
                     timeOfThisPeak = timeOfNow;
+
                     /*
-                     走路或者跑步的识别
+                     一次波形识别
                      * */
-                    countStep();
+                    countOne();
+                    if(dt > 10000L) {
+                        resSomeValue();
+                    }
                 }
-                if (timeOfNow - timeOfLastPeak >= TimeInterval
-                        && (peakOfWave - valleyOfWave >= InitialValue)) {
+                /*if (dt >= timeInterval  && dw <= INITIAL_VALUE) {
                     timeOfThisPeak = timeOfNow;
-                    ThreadValue = peakValleyThread(peakOfWave - valleyOfWave);
-                }
+                    threadValue = peakValleyThread(dw);
+                }*/
+
             }
         }
-        gravityOld = values;
+        valueOld = value;
     }
 
 
-    private void countStep() {
-        timeOfLastStep = timeOfThisStep;
+    public void countOne() {
+
+        count++;
+
+        /*timeOfLastStep = timeOfThisStep;
         timeOfThisStep = System.currentTimeMillis();
         long diffValue = timeOfThisStep - timeOfLastStep;
-        if (diffValue <= 3000L) {
+        if (diffValue <= 6000L) {
             averageTimeOfEveryStep += diffValue;
-            stepCount++;
-            Log.i("result", stepCount+"");
+
             if (stepCount == 9) {
                 averageTimeOfEveryStep = averageTimeOfEveryStep / 10;
                 Log.i("result", "averageTimeOfEveryStep: " + averageTimeOfEveryStep);
-                if (averageTimeOfEveryStep <= 380) {
-                    Log.i("result", "跑步");
-                } else if (averageTimeOfEveryStep >= 450) {
-                    Log.i("result", "走路");
-                } else {
-                    Log.i("result", "快走");
-                }
-            } else if (stepCount > 9) {
-                resSomeValue();
             }
         } else {//超时
             resSomeValue();
-        }
+        }*/
     }
 
     private void resSomeValue() {
-        stepCount = 0;
-        averageTimeOfEveryStep = 0;
+        continueUpCount = 0;
+        continueUpFormerCount = 0;
+        lastStatus = false;
+        isDirectionUp = false;
     }
 
 
@@ -139,26 +142,42 @@ public class PaceAndRunDetector {
      * 2.所以要记录每次的波谷值，为了和下次的波峰做对比
      * */
     public boolean detectorPeak(float newValue, float oldValue) {
+
         lastStatus = isDirectionUp;
         if (newValue >= oldValue) {
             isDirectionUp = true;
             continueUpCount++;
-        } else {
+            continueDownCount = 0;
+        } else if (newValue < oldValue){
+            continueDownCount++;
+            if(continueDownCount == 1) {
+                tempValue[0] = oldValue;
+            }
+        }
+
+        if(continueDownCount >= 1) {
             continueUpFormerCount = continueUpCount;
             continueUpCount = 0;
             isDirectionUp = false;
         }
 
+        Log.d("detectorPeak", String.format("%b, %b, %d, %f, %f", isDirectionUp, lastStatus, continueUpFormerCount, newValue, Math.abs(newValue - oldValue)));
+
         if (!isDirectionUp && lastStatus
-                && (continueUpFormerCount >= 2 || oldValue >= 20)) {
-            peakOfWave = oldValue;
+                && continueUpFormerCount >= CONTINUE_UP_LIMIT
+                && tempValue[0] >= PEAK_MIN && tempValue[0] < PEAK_MAX) {
+            Log.d("peakOfWave", String.format("%f", tempValue[0]));
+            peakOfWave = tempValue[0];
             return true;
-        } else if (!lastStatus && isDirectionUp) {
+        } else if (!lastStatus && isDirectionUp
+                && oldValue >= VALLEY_MIN && oldValue < VALLEY_MAX) {
+            Log.d("valleyOfWave", String.format("%f", oldValue));
             valleyOfWave = oldValue;
             return false;
         } else {
             return false;
         }
+
     }
 
     /*
@@ -168,16 +187,16 @@ public class PaceAndRunDetector {
      * 3.在将数组传入函数averageValue中计算阈值
      * */
     public float peakValleyThread(float value) {
-        float tempThread = ThreadValue;
-        if (tempCount < ValueNum) {
+        float tempThread = highValue;
+        if (tempCount < TEMP_NUM) {
             tempValue[tempCount] = value;
             tempCount++;
         } else {
-            tempThread = averageValue(tempValue, ValueNum);
-            for (int i = 1; i < ValueNum; i++) {
+            tempThread = averageValue(tempValue, TEMP_NUM);
+            for (int i = 1; i < TEMP_NUM; i++) {
                 tempValue[i - 1] = tempValue[i];
             }
-            tempValue[ValueNum - 1] = value;
+            tempValue[TEMP_NUM - 1] = value;
         }
         return tempThread;
     }
@@ -192,18 +211,8 @@ public class PaceAndRunDetector {
         for (int i = 0; i < n; i++) {
             ave += value[i];
         }
-        ave = ave / ValueNum;
-        if (ave >= 8)
-            ave = (float) 4.3;
-        else if (ave >= 7 && ave < 8)
-            ave = (float) 3.3;
-        else if (ave >= 4 && ave < 7)
-            ave = (float) 2.3;
-        else if (ave >= 3 && ave < 4)
-            ave = (float) 2.0;
-        else {
-            ave = (float) 1.3;
-        }
+        ave = ave / TEMP_NUM;
         return ave;
     }
+
 }

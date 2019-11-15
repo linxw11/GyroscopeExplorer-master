@@ -1,11 +1,8 @@
 package com.kircherelectronics.gyroscopeexplorer.activity;
 
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,16 +17,17 @@ import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 import com.kircherelectronics.fsensor.filter.gyroscope.OrientationGyroscope;
 import com.kircherelectronics.gyroscopeexplorer.R;
+import com.kircherelectronics.gyroscopeexplorer.detector.BeadDetector;
+import com.kircherelectronics.gyroscopeexplorer.detector.StepDetector;
 import com.kircherelectronics.gyroscopeexplorer.listener.Simulator;
+import com.kircherelectronics.gyroscopeexplorer.util.ComplementaryFilter;
+import com.kircherelectronics.gyroscopeexplorer.util.DynamicAverage;
 
-import org.apache.commons.math3.complex.Quaternion;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-
 
 public class DebugActivity extends AppCompatActivity {
 
@@ -52,6 +50,11 @@ public class DebugActivity extends AppCompatActivity {
     private double mGraph1LastXValue = 0d;
     private double mGraph2LastXValue = 0d;
 
+    private BeadDetector beadDetector = new BeadDetector();
+    private StepDetector stepDetector = new StepDetector();
+    private ComplementaryFilter complementaryFilter = new ComplementaryFilter();
+    private DynamicAverage dynamicAverageGyr = new DynamicAverage();
+
     private LineGraphSeries<DataPoint> mSeries11;
     private LineGraphSeries<DataPoint> mSeries12;
     private LineGraphSeries<DataPoint> mSeries13;
@@ -65,8 +68,8 @@ public class DebugActivity extends AppCompatActivity {
 
     //peak detection variables
     private double lastXPoint = 1d;
-    double stepThreshold = 1d;
-    double noiseThreshold = 20d;
+    double stepThreshold = 5d;
+    double noiseThreshold = 15d;
     private int windowSize = 20;
 
     private static OrientationGyroscope orientationGyroscope = new OrientationGyroscope();
@@ -107,7 +110,11 @@ public class DebugActivity extends AppCompatActivity {
         graph.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph.getViewport().setXAxisBoundsManual(true);
         graph.getViewport().setMinX(0);
-        graph.getViewport().setMaxX(20);
+        graph.getViewport().setMaxX(40);
+
+        graph.getViewport().setYAxisBoundsManual(true);
+        graph.getViewport().setMinY(-2);
+        graph.getViewport().setMaxY(2);
 
         //Graph for showing smoothed acceleration magnitude signal
         GraphView graph2 = (GraphView) this.findViewById(R.id.graph2);
@@ -124,7 +131,7 @@ public class DebugActivity extends AppCompatActivity {
         graph2.getViewport().setMinX(0);
         graph2.getViewport().setMaxX(20);
 
-        Simulator.registListener(this, "data3.txt", (event)-> onSensorChanged(event));
+        Simulator.registListener(this, "data2.txt", (event)-> onSensorChanged(event));
     }
 
     //Button to link home view from debug view
@@ -139,7 +146,30 @@ public class DebugActivity extends AppCompatActivity {
         float[] values = e.getData();
         long timestamp = e.getTimestamp();
         int type = e.getType();
-        switch (type) {
+
+        float[] acc = new float[]{values[0], values[1], values[2]};
+
+        float[] gyr = new float[]{values[3], values[4], values[5]};
+
+        gyr = dynamicAverageGyr.removeAverage(gyr);
+
+        float[] angle = complementaryFilter.filter(acc, gyr);
+
+        float sum = 0;
+        for(float w: angle) {
+            sum += (w * w);
+        }
+        beadDetector.detectorNew(angle[0]);
+        stepDetector.detectorNew(angle[0]);
+        mStepCounter = beadDetector.getCount();
+        mStepCounterAndroid = stepDetector.getCount();
+        // stepDetector.detectorNew(angle[0]);
+
+        mGraph1LastXValue += 1d;
+        mSeries11.appendData(new DataPoint(mGraph1LastXValue, angle[0]), true, 40);
+        mSeries12.appendData(new DataPoint(mGraph1LastXValue, Math.sqrt(sum)), true, 40);
+
+        /*switch (type) {
             case Sensor.TYPE_STEP_COUNTER:
                 if(mInitialStepCount == 0.0){
                     mInitialStepCount = values[0];
@@ -147,22 +177,22 @@ public class DebugActivity extends AppCompatActivity {
                 mStepCounterAndroid = values[0];
                 break;
             case Sensor.TYPE_GYROSCOPE:
-                System.arraycopy(values, 0, rotation, 0, values.length);
+                *//*System.arraycopy(values, 0, rotation, 0, values.length);
                 if(!orientationGyroscope.isBaseOrientationSet()) {
                     orientationGyroscope.setBaseOrientation(Quaternion.IDENTITY);
                     return;
                 } else {
                     orientation = orientationGyroscope.calculateOrientation(rotation, timestamp);
                 }
-
-                /*float[] degrees = new float[3];
+*//*
+                *//*float[] degrees = new float[3];
                 degrees[0] = (float) (Math.toDegrees(orientation[0]) + 360) % 360;
                 degrees[1] = (float) (Math.toDegrees(orientation[1]) + 360) % 360;
-                degrees[2] = (float) (Math.toDegrees(orientation[2]) + 360) % 360;*/
+                degrees[2] = (float) (Math.toDegrees(orientation[2]) + 360) % 360;*//*
 
                 // Log.e("degrees", Arrays.toString(orientation));
 
-                float[] QAC = new float[4];
+                *//*float[] QAC = new float[4];
                 getQuaternionFromVector(QAC, orientation);
 
                 if(num >= 3){
@@ -179,7 +209,7 @@ public class DebugActivity extends AppCompatActivity {
                         - Math.sin(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.cos(orientation[2]/2);
 
 
-                    /*float[] QBA = new float[4];
+                    *//**//*float[] QBA = new float[4];
                     QBA[0] = lastQ[0];
                     QBA[1] = -lastQ[1];
                     QBA[2] = -lastQ[2];
@@ -189,7 +219,7 @@ public class DebugActivity extends AppCompatActivity {
                     QBC[0] = QAC[0]*QBA[0] - QAC[1]*QBA[1] - QAC[2]*QBA[2] -QAC[3]*QBA[3];
                     QBC[1] = QAC[0]*QBA[1] + QAC[1]*QBA[0] + QAC[2]*QBA[3] -QAC[3]*QBA[2];
                     QBC[2] = QAC[0]*QBA[2] - QAC[1]*QBA[3] + QAC[2]*QBA[0] +QAC[3]*QBA[1];
-                    QBC[3] = QAC[0]*QBA[3] + QAC[1]*QBA[2] - QAC[2]*QBA[1] +QAC[3]*QBA[0];*/
+                    QBC[3] = QAC[0]*QBA[3] + QAC[1]*QBA[2] - QAC[2]*QBA[1] +QAC[3]*QBA[0];*//**//*
 
                     //偏向Z轴的位移
                     double z = Math.atan2(2*QBC[1]*QBC[2] - 2*QBC[0]*QBC[3]
@@ -216,10 +246,51 @@ public class DebugActivity extends AppCompatActivity {
                     num++;
                     lastQ = QAC;
                 }
+*//*
 
-                // mRawAccelValues[0] = values[0];
-                // mRawAccelValues[1] = values[1];
-                // mRawAccelValues[2] = values[2];
+                Log.e("degrees", Arrays.toString(values));
+                *//*for (int i=0; i<3; i++) {
+                    values[i] = (float) (values[i] * Math.PI / 180);
+                    mRawAccelValues[i] += (values[i] * 0.5);
+                }*//*
+
+                float dT = 0.5f;
+                // Axis of the rotation sample, not normalized yet.
+                float axisX = values[0];
+                float axisY = values[1];
+                float axisZ = values[2];
+
+                // Calculate the angular speed of the sample
+                float omegaMagnitude = (float) Math.sqrt(axisX*axisX + axisY*axisY + axisZ*axisZ);
+
+                // Normalize the rotation vector if it's big enough to get the axis
+                if (omegaMagnitude !=0 ) {
+                    axisX /= omegaMagnitude;
+                    axisY /= omegaMagnitude;
+                    axisZ /= omegaMagnitude;
+                }
+
+                // Integrate around this axis with the angular speed by the time step
+                // in order to get a delta rotation from this sample over the time step
+                // We will convert this axis-angle representation of the delta rotation
+                // into a quaternion before turning it into the rotation matrix.
+                float thetaOverTwo = omegaMagnitude * dT / 2.0f;
+                float sinThetaOverTwo = (float) Math.sin(thetaOverTwo);
+                float cosThetaOverTwo = (float) Math.cos(thetaOverTwo);
+
+                float[] deltaRotationVector = new float[4];
+                deltaRotationVector[0] = sinThetaOverTwo * axisX;
+                deltaRotationVector[1] = sinThetaOverTwo * axisY;
+                deltaRotationVector[2] = sinThetaOverTwo * axisZ;
+                deltaRotationVector[3] = cosThetaOverTwo;
+
+                float[] deltaRotationMatrix = new float[9];
+                SensorManager.getRotationMatrixFromVector(deltaRotationMatrix, deltaRotationVector);
+
+                getOrientation(deltaRotationMatrix, mRawAccelValues);
+                // User code should concatenate the delta rotation we computed with the current
+                // rotation in order to get the updated rotation.
+                // rotationCurrent = rotationCurrent * deltaRotationMatrix;
 
                 // lastMag = Math.sqrt(Math.pow(mRawAccelValues[0], 2) + Math.pow(mRawAccelValues[1], 2) + Math.pow(mRawAccelValues[2], 2));
 
@@ -238,12 +309,12 @@ public class DebugActivity extends AppCompatActivity {
                 avgMag = Math.pow(mCurAccelAvg[0], 2) + Math.pow(mCurAccelAvg[1], 2) + Math.pow(mCurAccelAvg[2], 2);
                 // Math.sqrt();
                 netMag = lastMag - avgMag; //removes gravity effect
-                Log.e("d", netMag + "");
+                // Log.e("d", netMag + "");
                 //update graph data points
                 mGraph1LastXValue += 1d;
-                // mSeries11.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[0]), true, 20);
-                // mSeries12.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[1]), true, 20);
-                // mSeries13.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[2]), true, 20);
+                mSeries11.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[0]), true, 20);
+                mSeries12.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[1]), true, 20);
+                mSeries13.appendData(new DataPoint(mGraph1LastXValue, mRawAccelValues[2]), true, 20);
 
                 mGraph2LastXValue += 1d;
                 // mSeries21.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 20);
@@ -254,9 +325,17 @@ public class DebugActivity extends AppCompatActivity {
                 // In this example, alpha is calculated as t / (t + dT),
                 // where t is the low-pass filter's time-constant and
                 // dT is the event delivery rate.
+<<<<<<< HEAD
                 float deltaT = 0.5f;
                 float freqCut = 15;
                 float alpha = (float) (deltaT/(deltaT+1/(2*Math.PI*freqCut)));
+=======
+
+                float deltaT = 0.5f;
+                float freqCut = 10;
+                float t = (float) (1.0f/(2*Math.PI*freqCut));
+                float alpha = t /(deltaT + t);
+>>>>>>> dae7416a02c789d8343a34650b192b7608874995
 
                 // Isolate the force of gravity with the low-pass filter.
                 gravity[0] = alpha * gravity[0] + (1 - alpha) * values[0];
@@ -268,19 +347,28 @@ public class DebugActivity extends AppCompatActivity {
                 linear_acceleration[1] = values[1] - gravity[1];
                 linear_acceleration[2] = values[2] - gravity[2];
 
-                Log.d("acceleration", Arrays.toString(linear_acceleration));
+                double[] degress = new double[]{
+                        Math.atan(Math.sqrt(Math.pow(linear_acceleration[0], 2)
+                          + Math.pow(linear_acceleration[1], 2))/linear_acceleration[2]),
+                        Math.atan(linear_acceleration[0]/Math.sqrt(Math.pow(linear_acceleration[1], 2)
+                                + Math.pow(linear_acceleration[2], 2))),
+                        Math.atan(linear_acceleration[1]/Math.sqrt(Math.pow(linear_acceleration[0], 2)
+                                + Math.pow(linear_acceleration[2], 2)))
+                };
 
-                mSeries11.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[0])), true, 20);
-                mSeries12.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[1])), true, 20);
-                mSeries13.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[2])), true, 20);
+                Log.d("acceleration", Arrays.toString(degress));
+
+                // mSeries11.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[0])), true, 20);
+                // mSeries12.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[1])), true, 20);
+                //.appendData(new DataPoint(mGraph1LastXValue, Math.abs(linear_acceleration[2])), true, 20);
 
                 lastMag = Math.sqrt(Math.pow(linear_acceleration[0], 2) + Math.pow(linear_acceleration[1], 2) + Math.pow(linear_acceleration[2], 2));
 
-                mSeries21.appendData(new DataPoint(mGraph2LastXValue, lastMag), true, 20);
+                // mSeries21.appendData(new DataPoint(mGraph2LastXValue, degress[0]), true, 20);
                 break;
             }
         }
-
+*/
         TextView calculatedStep = (TextView) this.findViewById(R.id.tv1);
         TextView androidStep = (TextView) this.findViewById(R.id.tv2);
 
@@ -351,6 +439,32 @@ public class DebugActivity extends AppCompatActivity {
         Q[1] = -rv[0];
         Q[2] = -rv[1];
         Q[3] = -rv[2];
+    }
+
+    public static float[] getOrientation(float[] R, float values[]) {
+        /*
+         * 4x4 (length=16) case:
+         *   /  R[ 0]   R[ 1]   R[ 2]   0  \
+         *   |  R[ 4]   R[ 5]   R[ 6]   0  |
+         *   |  R[ 8]   R[ 9]   R[10]   0  |
+         *   \      0       0       0   1  /
+         *
+         * 3x3 (length=9) case:
+         *   /  R[ 0]   R[ 1]   R[ 2]  \
+         *   |  R[ 3]   R[ 4]   R[ 5]  |
+         *   \  R[ 6]   R[ 7]   R[ 8]  /
+         *
+         */
+        if (R.length == 9) {
+            values[0] = (float)Math.atan2(R[1], R[4]);
+            values[1] = (float)Math.asin(-R[7]);
+            values[2] = (float)Math.atan2(-R[6], R[8]);
+        } else {
+            values[0] = (float)Math.atan2(R[1], R[5]);
+            values[1] = (float)Math.asin(-R[9]);
+            values[2] = (float)Math.atan2(-R[8], R[10]);
+        }
+        return values;
     }
 }
 
