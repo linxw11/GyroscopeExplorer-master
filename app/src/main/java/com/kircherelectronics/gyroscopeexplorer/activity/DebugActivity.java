@@ -17,7 +17,11 @@ import com.jjoe64.graphview.series.DataPoint;
 import com.jjoe64.graphview.series.LineGraphSeries;
 import com.kircherelectronics.fsensor.filter.gyroscope.OrientationGyroscope;
 import com.kircherelectronics.gyroscopeexplorer.R;
+import com.kircherelectronics.gyroscopeexplorer.detector.BeadDetector;
+import com.kircherelectronics.gyroscopeexplorer.detector.StepDetector;
 import com.kircherelectronics.gyroscopeexplorer.listener.Simulator;
+import com.kircherelectronics.gyroscopeexplorer.util.ComplementaryFilter;
+import com.kircherelectronics.gyroscopeexplorer.util.DynamicAverage;
 
 
 import java.util.ArrayList;
@@ -45,6 +49,11 @@ public class DebugActivity extends AppCompatActivity {
 
     private double mGraph1LastXValue = 0d;
     private double mGraph2LastXValue = 0d;
+
+    private BeadDetector beadDetector = new BeadDetector();
+    private StepDetector stepDetector = new StepDetector();
+    private ComplementaryFilter complementaryFilter = new ComplementaryFilter();
+    private DynamicAverage dynamicAverageGyr = new DynamicAverage();
 
     private LineGraphSeries<DataPoint> mSeries11;
     private LineGraphSeries<DataPoint> mSeries12;
@@ -101,7 +110,11 @@ public class DebugActivity extends AppCompatActivity {
         graph.getGridLabelRenderer().setVerticalAxisTitle("Signal Value");
         graph.getViewport().setXAxisBoundsManual(true);
         graph.getViewport().setMinX(0);
-        graph.getViewport().setMaxX(20);
+        graph.getViewport().setMaxX(40);
+
+        graph.getViewport().setYAxisBoundsManual(true);
+        graph.getViewport().setMinY(-2);
+        graph.getViewport().setMaxY(2);
 
         //Graph for showing smoothed acceleration magnitude signal
         GraphView graph2 = (GraphView) this.findViewById(R.id.graph2);
@@ -133,7 +146,26 @@ public class DebugActivity extends AppCompatActivity {
         float[] values = e.getData();
         long timestamp = e.getTimestamp();
         int type = e.getType();
-        switch (type) {
+
+        float[] acc = new float[]{values[0], values[1], values[2]};
+
+        float[] gyr = new float[]{values[3], values[4], values[5]};
+
+        gyr = dynamicAverageGyr.removeAverage(gyr);
+
+        float[] angle = complementaryFilter.filter(acc, gyr);
+
+        beadDetector.detectorNew(angle[0]);
+
+        mStepCounter = beadDetector.getCount();
+
+        // stepDetector.detectorNew(angle[0]);
+
+        mGraph1LastXValue += 1d;
+        mSeries11.appendData(new DataPoint(mGraph1LastXValue, angle[0]), true, 40);
+        mSeries12.appendData(new DataPoint(mGraph1LastXValue, angle[1]), true, 40);
+
+        /*switch (type) {
             case Sensor.TYPE_STEP_COUNTER:
                 if(mInitialStepCount == 0.0){
                     mInitialStepCount = values[0];
@@ -141,22 +173,22 @@ public class DebugActivity extends AppCompatActivity {
                 mStepCounterAndroid = values[0];
                 break;
             case Sensor.TYPE_GYROSCOPE:
-                /*System.arraycopy(values, 0, rotation, 0, values.length);
+                *//*System.arraycopy(values, 0, rotation, 0, values.length);
                 if(!orientationGyroscope.isBaseOrientationSet()) {
                     orientationGyroscope.setBaseOrientation(Quaternion.IDENTITY);
                     return;
                 } else {
                     orientation = orientationGyroscope.calculateOrientation(rotation, timestamp);
                 }
-*/
-                /*float[] degrees = new float[3];
+*//*
+                *//*float[] degrees = new float[3];
                 degrees[0] = (float) (Math.toDegrees(orientation[0]) + 360) % 360;
                 degrees[1] = (float) (Math.toDegrees(orientation[1]) + 360) % 360;
-                degrees[2] = (float) (Math.toDegrees(orientation[2]) + 360) % 360;*/
+                degrees[2] = (float) (Math.toDegrees(orientation[2]) + 360) % 360;*//*
 
                 // Log.e("degrees", Arrays.toString(orientation));
 
-                /*float[] QAC = new float[4];
+                *//*float[] QAC = new float[4];
                 getQuaternionFromVector(QAC, orientation);
 
                 if(num >= 3){
@@ -173,7 +205,7 @@ public class DebugActivity extends AppCompatActivity {
                         - Math.sin(orientation[0]/2)*Math.sin(orientation[1]/2)*Math.cos(orientation[2]/2);
 
 
-                    *//*float[] QBA = new float[4];
+                    *//**//*float[] QBA = new float[4];
                     QBA[0] = lastQ[0];
                     QBA[1] = -lastQ[1];
                     QBA[2] = -lastQ[2];
@@ -183,7 +215,7 @@ public class DebugActivity extends AppCompatActivity {
                     QBC[0] = QAC[0]*QBA[0] - QAC[1]*QBA[1] - QAC[2]*QBA[2] -QAC[3]*QBA[3];
                     QBC[1] = QAC[0]*QBA[1] + QAC[1]*QBA[0] + QAC[2]*QBA[3] -QAC[3]*QBA[2];
                     QBC[2] = QAC[0]*QBA[2] - QAC[1]*QBA[3] + QAC[2]*QBA[0] +QAC[3]*QBA[1];
-                    QBC[3] = QAC[0]*QBA[3] + QAC[1]*QBA[2] - QAC[2]*QBA[1] +QAC[3]*QBA[0];*//*
+                    QBC[3] = QAC[0]*QBA[3] + QAC[1]*QBA[2] - QAC[2]*QBA[1] +QAC[3]*QBA[0];*//**//*
 
                     //偏向Z轴的位移
                     double z = Math.atan2(2*QBC[1]*QBC[2] - 2*QBC[0]*QBC[3]
@@ -210,13 +242,13 @@ public class DebugActivity extends AppCompatActivity {
                     num++;
                     lastQ = QAC;
                 }
-*/
+*//*
 
                 Log.e("degrees", Arrays.toString(values));
-                /*for (int i=0; i<3; i++) {
+                *//*for (int i=0; i<3; i++) {
                     values[i] = (float) (values[i] * Math.PI / 180);
                     mRawAccelValues[i] += (values[i] * 0.5);
-                }*/
+                }*//*
 
                 float dT = 0.5f;
                 // Axis of the rotation sample, not normalized yet.
@@ -326,7 +358,7 @@ public class DebugActivity extends AppCompatActivity {
                 break;
             }
         }
-
+*/
         TextView calculatedStep = (TextView) this.findViewById(R.id.tv1);
         TextView androidStep = (TextView) this.findViewById(R.id.tv2);
 

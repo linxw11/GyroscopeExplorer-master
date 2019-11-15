@@ -40,13 +40,13 @@ public class Simulator  {
 
                         float[] data = dataList.get(i);
 
-                        float[] acc = new float[]{data[0], data[1], data[2]};
+                        // float[] acc = new float[]{data[0], data[1], data[2]};
                         Event event = new Event();
                         event.setTimestamp(System.nanoTime());
-                        event.setData(acc);
+                        event.setData(data);
                         event.setType(Sensor.TYPE_ACCELEROMETER);
                         emitter.onNext(event);
-                        try {
+                        /*try {
                             Thread.sleep(20);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
@@ -56,7 +56,7 @@ public class Simulator  {
                         event.setTimestamp(System.nanoTime());
                         event.setData(gyr);
                         event.setType(Sensor.TYPE_GYROSCOPE);
-                        emitter.onNext(event);
+                        emitter.onNext(event);*/
                         try {
                             Thread.sleep(500);
                         } catch (InterruptedException e) {
